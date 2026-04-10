@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+  <style>
+    body { margin: 0; background: #111; color: white; font-family: sans-serif; text-align: center; }
+    canvas { width: 100%; max-width: 500px; border: 2px solid #333; margin-top: 10px; }
+    #log { font-size: 12px; color: #aaa; padding: 10px; height: 50px; overflow-y: auto; }
+    #status-box { font-weight: bold; padding: 15px; font-size: 20px; }
+  </style>
+</head>
+<body>
+
+  <div id="status-box">Tap Start</div>
+  <button id="start" style="padding: 15px 30px; font-size: 18px;">START CAMERA</button>
+  <div id="log">Status: Waiting...</div>
+  
+  <video id="input_video" style="display:none;"></video>
+  <canvas id="output_canvas"></canvas>
+
+  <script>
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const log = document.getElementById('log');
+    const statusBox = document.getElementById('status-box');
+
+    function updateLog(msg) { log.innerText = "Log: " + msg; }
+
+    const pose = new Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+
+    // Lower complexity = Faster performance on mobile
+    pose.setOptions({ modelComplexity: 0, smoothLandmarks: true, minDetectionConfidence: 0.5 });
+
+    pose.onResults((results) => {
+      updateLog("Model processing frames...");
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.poseLandmarks) {
+        const leftS = results.poseLandmarks[11];
+        const rightS = results.poseLandmarks[12];
+        const diff = Math.abs(leftS.y - rightS.y);
+
+        if (diff > 0.04) {
+          statusBox.innerText = "❌ UNBALANCED";
+          statusBox.style.color = "#ff4444";
+        } else {
+          statusBox.innerText = "✅ GOOD POSTURE";
+          statusBox.style.color = "#00ff88";
+        }
+      }
+    });
+
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        canvasElement.width = videoElement.videoWidth;
+        canvasElement.height = videoElement.videoHeight;
+        await pose.send({image: videoElement});
+      },
+      width: 480, height: 360
+    });
+
+    document.getElementById('start').onclick = () => {
+      updateLog("Starting camera...");
+      camera.start().then(() => {
+        updateLog("Camera live. Downloading AI model...");
+        document.getElementById('start').style.display = 'none';
+      }).catch(e => updateLog("Error: " + e));
+    };
+  </script>
+</body>
+</html>
